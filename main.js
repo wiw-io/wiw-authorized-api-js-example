@@ -1,15 +1,17 @@
 const axios = require('axios')
+const FormData = require('form-data');
 const http = require('http')
 const url = require('url')
+const {AxiosError} = require("axios");
 
 // Use test client_id and client_secret
-const CLIENT_ID = '4s4CzaDQFhVkacBqhvyeBEL4lkucvVfH'
-const CLIENT_SECRET = '_rbEkQQMui76oAT1Y_CUcETex5MEvkIsrkfvLmYa7OZm0g51xozpdpQD-X6e2jT5'
+const CLIENT_ID = 'wiw-test-client'
+const CLIENT_SECRET = 'wiw-test-secret'
 
-// Start a basic http server on localhost:8001
+// Start a basic http server on localhost:8888
 const httpServer = http.createServer()
-httpServer.listen(8001, () => {
-    console.log(`basic server start at localhost:8001`)
+httpServer.listen(8888, () => {
+    console.log(`basic server start at localhost:8888`)
 })
 
 // Listen to login or callback request
@@ -20,13 +22,11 @@ httpServer.on('request', async (request, response) => {
     // Step 1: Redirect to WIW OAuth 2.0 server when receiving request to connect WIW
     if (request_url.startsWith('/login_wiw')) {
         response.statusCode = 302
-        response.setHeader('Location', `https://login.wiw.io/authorize` +
-            `?audience=https://api.wiw.io` +
-            '&scope=offline_access read:profile' +
-            '&response_type=code' +
+        response.setHeader('Location', `https://api.wiw.io/oidc/authorize` +
+            `?response_type=code` +
             `&client_id=${CLIENT_ID}` +
-            `&connection=mask` +
-            `&redirect_uri=http://localhost:8001/authorize_success`)
+            '&scope=offline_access openid read:token' +
+            `&redirect_uri=http://localhost:8888/authorize_success`)
         response.end()
     }
 
@@ -40,17 +40,17 @@ httpServer.on('request', async (request, response) => {
             console.log(message)
 
             // Step 4. Get access_token and refresh_token using authorization token
+            let data = new FormData()
+            data.append('grant_type', 'authorization_code')
+            data.append('code', authCode)
+            data.append('client_id', CLIENT_ID)
+            data.append('client_secret', CLIENT_SECRET)
+            data.append('redirect_uri', 'http://localhost:8888/authorize_success')
             let res = await axios.request({
                 method: 'POST',
-                url: `https://login.wiw.io/oauth/token`,
-                headers: {'content-type': 'application/json'},
-                data: JSON.stringify({
-                    grant_type: 'authorization_code',
-                    code: authCode,
-                    client_id: CLIENT_ID,
-                    client_secret: CLIENT_SECRET,
-                    redirect_uri: "http://localhost:8001/authorize_success"
-                })
+                url: `https://api.wiw.io/oidc/oauth/token`,
+                headers: {'content-type': 'application/x-www-form-urlencoded'},
+                data
             })
             let accessToken = res.data.access_token
             let refreshToken = res.data.refresh_token
@@ -59,16 +59,17 @@ httpServer.on('request', async (request, response) => {
             console.log(message)
 
             // Get new access_token using refresh token
+            data = new FormData()
+            data.append('grant_type', 'refresh_token')
+            data.append('refresh_token', refreshToken)
+            data.append('client_id', CLIENT_ID)
+            data.append('client_secret', CLIENT_SECRET)
+            data.append('redirect_uri', 'http://localhost:8888/authorize_success')
             res = await axios.request({
                 method: 'POST',
-                url: `https://login.wiw.io/oauth/token`,
-                headers: {'content-type': 'application/json'},
-                data: JSON.stringify({
-                    grant_type: 'refresh_token',
-                    refresh_token: refreshToken,
-                    client_id: CLIENT_ID,
-                    client_secret: CLIENT_SECRET
-                })
+                url: `https://api.wiw.io/oidc/oauth/token`,
+                headers: {'content-type': 'application/x-www-form-urlencoded'},
+                data
             })
             accessToken = res.data.access_token
             message = `Get new access token from refresh token:\nAccess token:${accessToken}`
@@ -78,10 +79,10 @@ httpServer.on('request', async (request, response) => {
             // Call WIW authorized API using access token
             res = await axios.request({
                 method: 'GET',
-                url: `https://api.wiw.io/mask/profile`,
+                url: `https://api.wiw.io/user/tokens/balance?addr=0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee`,
                 headers: {Authorization: `Bearer ${accessToken}`}
             })
-            message = `Retrieve data from /mask/profile API with access token ${accessToken}\n${JSON.stringify(res.data)}`
+            message = `Retrieve user ETH balance from API with access token ${accessToken}\n${JSON.stringify(res.data)}`
             returnMessage += `\n\n${message}`
             console.log(message)
 
@@ -90,7 +91,8 @@ httpServer.on('request', async (request, response) => {
             response.end(returnMessage)
         } catch (e) {
             response.statusCode = 500
-            response.end(e)
+            const error = (e instanceof AxiosError && e.response) ? e.response.data : e;
+            response.end(JSON.stringify(error))
         }
     }
 

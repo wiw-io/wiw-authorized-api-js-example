@@ -15,5 +15,5 @@ to retrieve WIW profile. Here are the steps to run the example:
    $ npm install
    $ node main.js
    ```
-3. Open a web explorer, enter [http://localhost:8001/login_wiw](http://localhost:8001/login_wiw), 
+3. Open a web explorer, enter [http://localhost:8888/login_wiw](http://localhost:8001/login_wiw), 
 login with your WIW account and consent on prompt window. You will see the entire OAuth flow printed on your browser tab as well as in server logs.
